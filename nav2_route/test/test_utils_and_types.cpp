@@ -212,6 +212,43 @@ TEST(UtilsTest, test_to_visualization_msg_conversion)
   EXPECT_EQ(edge_id_bg_markers, expected_edge_id_bg_markers);
 }
 
+TEST(UtilsTest, test_speed_limit_labels)
+{
+  // Only edges whose "speed_limit" metadata is a float get a label, as a percentage
+  Graph graph;
+  graph.resize(4);
+  for (unsigned int i = 0; i != 4; i++) {
+    graph[i].nodeid = i + 1;
+    graph[i].coords.x = static_cast<float>(i);
+    graph[i].coords.y = 0.0f;
+  }
+  EdgeCost default_cost;
+  Metadata float_limit, int_limit;
+  float speed = 50.0f;
+  int int_speed = 30;  // What "speed_limit": 30 (no decimal point) becomes in a .geojson
+  float_limit.setValue<float>("speed_limit", speed);
+  int_limit.setValue<int>("speed_limit", int_speed);
+  graph[0].addEdge(default_cost, &graph[1], 10u, float_limit);
+  graph[1].addEdge(default_cost, &graph[2], 11u, int_limit);
+  graph[2].addEdge(default_cost, &graph[3], 12u);  // No speed_limit at all
+
+  visualization_msgs::msg::MarkerArray graph_msg;
+  EXPECT_NO_THROW(graph_msg = utils::toMsg(graph, "map", rclcpp::Time(1000)));
+
+  std::vector<std::string> labels;
+  size_t backgrounds = 0;
+  for (auto & marker : graph_msg.markers) {
+    if (marker.ns == "route_graph_edge_speed_limits") {
+      labels.push_back(marker.text);
+    } else if (marker.ns == "route_graph_edge_speed_limits_bg") {
+      backgrounds++;
+    }
+  }
+  ASSERT_EQ(labels.size(), 1u);
+  EXPECT_EQ(labels[0], "50.0%");
+  EXPECT_EQ(backgrounds, 1u);
+}
+
 TEST(UtilsTest, test_normalized_dot)
 {
   // Vectors are orthogonal

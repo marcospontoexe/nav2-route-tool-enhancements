@@ -18,6 +18,11 @@
 #include <limits>
 #include <string>
 #include <vector>
+#include <sstream>
+#include <iomanip>
+#include <any>
+#include <typeinfo>
+#include <algorithm>
 #include "std_msgs/msg/color_rgba.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
 #include "visualization_msgs/msg/marker.hpp"
@@ -169,6 +174,35 @@ inline visualization_msgs::msg::MarkerArray toMsg(
   edge_arrow_marker.color.b = 0.0;
   edge_arrow_marker.pose.position.z = 0.05;  // Slightly above the ground
 
+  // Background plate of the speed_limit label (colored with the edge color)
+  visualization_msgs::msg::Marker edge_speed_bg_marker;
+  edge_speed_bg_marker.header.frame_id = frame;
+  edge_speed_bg_marker.header.stamp = now;
+  edge_speed_bg_marker.action = 0;
+  edge_speed_bg_marker.ns = "route_graph_edge_speed_limits_bg";
+  edge_speed_bg_marker.type = visualization_msgs::msg::Marker::CUBE;
+  edge_speed_bg_marker.scale.x = 0.30;  // Wide enough for "100.0%"
+  edge_speed_bg_marker.scale.y = 0.10;
+  edge_speed_bg_marker.scale.z = 0.001;  // Thin plate
+  edge_speed_bg_marker.color.a = 0.85;  // r/g/b set per edge from edge_color
+  edge_speed_bg_marker.pose.position.z = 0.24;
+
+  // speed_limit value text, drawn near the start node of the edge
+  visualization_msgs::msg::Marker edge_speed_marker;
+  edge_speed_marker.header.frame_id = frame;
+  edge_speed_marker.header.stamp = now;
+  edge_speed_marker.action = 0;
+  edge_speed_marker.ns = "route_graph_edge_speed_limits";
+  edge_speed_marker.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
+  edge_speed_marker.scale.x = 0.12;
+  edge_speed_marker.scale.y = 0.12;
+  edge_speed_marker.scale.z = 0.12;
+  edge_speed_marker.color.r = 0.0;  // Fixed black: contrasts with all three
+  edge_speed_marker.color.g = 0.0;  // possible backgrounds (orange,
+  edge_speed_marker.color.b = 0.0;  // green/yellow, blue), all fairly light
+  edge_speed_marker.color.a = 1.0;
+  edge_speed_marker.pose.position.z = 0.25;
+
   for (const auto & node : graph) {
     node_pos.x = node.coords.x;
     node_pos.y = node.coords.y;
@@ -200,6 +234,17 @@ inline visualization_msgs::msg::MarkerArray toMsg(
           is_bidirectional = true;
           break;
         }
+      }
+
+      // Edge color by type (shared by the arrow and the speed_limit label background)
+      std_msgs::msg::ColorRGBA edge_color;
+      edge_color.a = 1.0;
+      if (is_bidirectional && node.nodeid > neighbor.end->nodeid) {
+        edge_color.r = 0.3; edge_color.g = 0.7; edge_color.b = 1.0;  // return edge: blue
+      } else if (is_bidirectional) {
+        edge_color.r = 0.5; edge_color.g = 1.0; edge_color.b = 0.3;  // outbound edge: green/yellow
+      } else {
+        edge_color.r = 1.0; edge_color.g = 0.5; edge_color.b = 0.0;  // unidirectional edge: orange
       }
 
       edges_marker.points.push_back(edge_start);
@@ -260,6 +305,69 @@ inline visualization_msgs::msg::MarkerArray toMsg(
       current_edge_id.text = std::to_string(neighbor.edgeid);
       msg.markers.push_back(current_edge_id);
 
+      // Add background + text for the edge's speed_limit near the start node, only if the edge
+      // actually has that metadata
+      auto speed_it = neighbor.metadata.data.find("speed_limit");
+      if (speed_it != neighbor.metadata.data.end()) {
+        if (speed_it->second.type() == typeid(float)) {
+          const float speed_limit_value = std::any_cast<float>(speed_it->second);
+
+          const float edge_dx = neighbor.end->coords.x - node.coords.x;
+          const float edge_dy = neighbor.end->coords.y - node.coords.y;
+          const float edge_len = std::hypotf(edge_dx, edge_dy);
+
+          float ux = 0.0, uy = 0.0;
+          if (edge_len > 1e-3) {
+            ux = edge_dx / edge_len;
+            uy = edge_dy / edge_len;
+          }
+          const float perp_x = -uy;  // perpendicular to the edge direction
+          const float perp_y = ux;
+
+          // Walk a small fraction of the edge from the start node (not the midpoint, where the ID
+          // is), with a floor and a cap so the label neither sticks to the node on short edges nor
+          // slides to the midpoint on long ones
+          float speed_along = std::max(0.25f * edge_len, 0.25f);
+          speed_along = std::min(speed_along, 0.4f * edge_len);
+
+          // Same side convention as the ID's y_offset, to keep the label off the edge line
+          const float speed_side = (node.nodeid > neighbor.end->nodeid) ? 1.0f : -1.0f;
+
+          const float speed_x = node.coords.x + ux * speed_along +
+            perp_x * 0.12f * speed_side;
+          const float speed_y = node.coords.y + uy * speed_along +
+            perp_y * 0.12f * speed_side;
+
+          visualization_msgs::msg::Marker current_edge_speed_bg = edge_speed_bg_marker;
+          current_edge_speed_bg.id = ++edge_speed_bg_marker.id;
+          current_edge_speed_bg.pose.position.x = speed_x;
+          current_edge_speed_bg.pose.position.y = speed_y;
+          current_edge_speed_bg.color.r = edge_color.r;
+          current_edge_speed_bg.color.g = edge_color.g;
+          current_edge_speed_bg.color.b = edge_color.b;
+          msg.markers.push_back(current_edge_speed_bg);
+
+          // speed_limit is a percentage of the maximum speed (see AdjustSpeedLimit), hence the "%"
+          // suffix
+          std::ostringstream speed_text_stream;
+          speed_text_stream << std::fixed << std::setprecision(1) << speed_limit_value << "%";
+
+          visualization_msgs::msg::Marker current_edge_speed_text = edge_speed_marker;
+          current_edge_speed_text.id = ++edge_speed_marker.id;
+          current_edge_speed_text.pose.position.x = speed_x;
+          current_edge_speed_text.pose.position.y = speed_y;
+          current_edge_speed_text.text = speed_text_stream.str();
+          msg.markers.push_back(current_edge_speed_text);
+        } else {
+          RCLCPP_WARN_ONCE(
+            rclcpp::get_logger("nav2_route_utils"),
+            "Edge metadata key 'speed_limit' is not stored as a float (found type: %s); "
+            "skipping the speed limit label for one or more edges. Graph files should "
+            "write speed_limit as a decimal (e.g. 85.0, not 85) so it is parsed as a float.",
+            speed_it->second.type().name());
+        }
+      }
+
       // Add arrow for Edge ID
       edge_arrow_marker.id++;
 
@@ -282,22 +390,8 @@ inline visualization_msgs::msg::MarkerArray toMsg(
       edge_arrow_marker.pose.orientation.w = std::cos(yaw / 2.0);
 
       // Color the arrow by edge type
-      if (is_bidirectional && node.nodeid > neighbor.end->nodeid) {
-        // Blue arrow for the return edge of a bidirectional pair
-        edge_arrow_marker.color.r = 0.3;
-        edge_arrow_marker.color.g = 0.7;
-        edge_arrow_marker.color.b = 1.0;
-      } else if (is_bidirectional) {
-        // Green/yellow arrow for the outbound edge of a bidirectional pair
-        edge_arrow_marker.color.r = 0.5;
-        edge_arrow_marker.color.g = 1.0;
-        edge_arrow_marker.color.b = 0.3;
-      } else {
-        // Orange arrow for a unidirectional edge
-        edge_arrow_marker.color.r = 1.0;
-        edge_arrow_marker.color.g = 0.5;
-        edge_arrow_marker.color.b = 0.0;
-      }
+      edge_arrow_marker.color = edge_color;
+      edge_arrow_marker.color.a = 0.8;  // the arrow keeps its own transparency
 
       msg.markers.push_back(edge_arrow_marker);
     }
