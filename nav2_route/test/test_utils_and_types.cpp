@@ -16,6 +16,7 @@
 // enhancements, see README.md in the repository root).
 
 #include <math.h>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -247,6 +248,45 @@ TEST(UtilsTest, test_speed_limit_labels)
   ASSERT_EQ(labels.size(), 1u);
   EXPECT_EQ(labels[0], "50.0%");
   EXPECT_EQ(backgrounds, 1u);
+}
+
+TEST(UtilsTest, test_arrow_alpha_from_penalty)
+{
+  // Arrow alpha = 0.5 + 0.5 * penalty / highest penalty in the graph
+  Graph graph;
+  graph.resize(5);
+  for (unsigned int i = 0; i != 5; i++) {
+    graph[i].nodeid = i + 1;
+    graph[i].coords.x = static_cast<float>(i);
+    graph[i].coords.y = 0.0f;
+  }
+  EdgeCost default_cost;
+  Metadata high, half, as_int;
+  float high_penalty = 10.0f;
+  float half_penalty = 5.0f;
+  int int_penalty = 10;  // Written without a decimal point: ignored (treated as 0.0)
+  high.setValue<float>("penalty", high_penalty);
+  half.setValue<float>("penalty", half_penalty);
+  as_int.setValue<int>("penalty", int_penalty);
+  graph[0].addEdge(default_cost, &graph[1], 10u, high);    // Arrow 1
+  graph[1].addEdge(default_cost, &graph[2], 11u, half);    // Arrow 2
+  graph[2].addEdge(default_cost, &graph[3], 12u);          // Arrow 3: no penalty
+  graph[3].addEdge(default_cost, &graph[4], 13u, as_int);  // Arrow 4
+
+  visualization_msgs::msg::MarkerArray graph_msg;
+  EXPECT_NO_THROW(graph_msg = utils::toMsg(graph, "map", rclcpp::Time(1000)));
+
+  std::map<int, float> alpha_by_arrow;
+  for (auto & marker : graph_msg.markers) {
+    if (marker.ns == "route_graph_edge_arrows") {
+      alpha_by_arrow[marker.id] = marker.color.a;
+    }
+  }
+  ASSERT_EQ(alpha_by_arrow.size(), 4u);
+  EXPECT_NEAR(alpha_by_arrow[1], 1.0, 1e-5);
+  EXPECT_NEAR(alpha_by_arrow[2], 0.75, 1e-5);
+  EXPECT_NEAR(alpha_by_arrow[3], 0.5, 1e-5);
+  EXPECT_NEAR(alpha_by_arrow[4], 0.5, 1e-5);
 }
 
 TEST(UtilsTest, test_normalized_dot)

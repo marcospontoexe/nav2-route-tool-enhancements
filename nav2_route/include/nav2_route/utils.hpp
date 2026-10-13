@@ -168,7 +168,7 @@ inline visualization_msgs::msg::MarkerArray toMsg(
   edge_arrow_marker.scale.x = 0.15;  // Arrow length
   edge_arrow_marker.scale.y = 0.03;  // Arrow width
   edge_arrow_marker.scale.z = 0.03;  // Arrow height
-  edge_arrow_marker.color.a = 0.8;
+  edge_arrow_marker.color.a = 0.8;  // Overwritten per edge: alpha comes from the "penalty"
   edge_arrow_marker.color.r = 1.0;  // Orange by default; recolored per edge below
   edge_arrow_marker.color.g = 0.5;
   edge_arrow_marker.color.b = 0.0;
@@ -202,6 +202,47 @@ inline visualization_msgs::msg::MarkerArray toMsg(
   edge_speed_marker.color.b = 0.0;  // green/yellow, blue), all fairly light
   edge_speed_marker.color.a = 1.0;
   edge_speed_marker.pose.position.z = 0.25;
+
+  // ---- Arrow transparency from the edge "penalty" (PenaltyScorer) ---- The LOWER the penalty, the
+  // more transparent the arrow; the HIGHER, the more opaque. Only the arrows change: they never
+  // overlap (the two arrows of a bidirectional pair start at the same midpoint and point in
+  // opposite directions) and each arrow is its own marker, with its own material in RViz, so one
+  // arrow's alpha never affects another's (unlike the edges' LINE_LIST, whose material is shared
+  // and whose last point decides the transparency of all lines).
+  constexpr float arrow_alpha_min = 0.5f;  // penalty 0: high floor so the direction stays readable
+  constexpr float arrow_alpha_max = 1.0f;  // highest penalty in the graph: fully opaque
+
+  // Read the penalty of an edge. Missing -> 0.0 (same default as PenaltyScorer). Only floats are
+  // accepted: "penalty": 50 written without a decimal point is parsed as an int, and PenaltyScorer
+  // throws bad_any_cast on that edge (the route fails); here we only warn once and treat it as 0.0,
+  // so the visualization keeps working.
+  auto edge_penalty = [](const nav2_route::DirectionalEdge & edge) -> float {
+      auto it = edge.metadata.data.find("penalty");
+      if (it == edge.metadata.data.end()) {
+        return 0.0f;
+      }
+      if (it->second.type() != typeid(float)) {
+        RCLCPP_WARN_ONCE(
+          rclcpp::get_logger("nav2_route_utils"),
+          "Edge metadata key 'penalty' is not stored as a float (found type: %s); "
+          "treating it as 0.0 for the arrow transparency. Graph files should write "
+          "penalty as a decimal (e.g. 50.0, not 50) -- the PenaltyScorer also fails "
+          "on such edges.",
+          it->second.type().name());
+        return 0.0f;
+      }
+      return std::any_cast<float>(it->second);
+    };
+
+  // First pass: highest penalty in the graph, to normalize the transparency (0..1) relative to the
+  // graph itself, so the signature of toMsg() (used by route_server and by the Route Tool panel)
+  // does not need to change.
+  float max_penalty = 0.0f;
+  for (const auto & node : graph) {
+    for (const auto & edge : node.neighbors) {
+      max_penalty = std::max(max_penalty, edge_penalty(edge));
+    }
+  }
 
   for (const auto & node : graph) {
     node_pos.x = node.coords.x;
@@ -389,9 +430,16 @@ inline visualization_msgs::msg::MarkerArray toMsg(
       edge_arrow_marker.pose.orientation.z = std::sin(yaw / 2.0);
       edge_arrow_marker.pose.orientation.w = std::cos(yaw / 2.0);
 
-      // Color the arrow by edge type
+      // Color the arrow by edge type (the hue still tells outbound / return / unidirectional)
       edge_arrow_marker.color = edge_color;
-      edge_arrow_marker.color.a = 0.8;  // the arrow keeps its own transparency
+
+      // Transparency from the penalty of THIS edge (this direction), normalized by the highest
+      // penalty in the graph: t = 0 (no penalty) ... 1 (highest penalty). A graph without any
+      // penalty leaves every arrow at the floor (arrow_alpha_min).
+      const float penalty_t = (max_penalty > 0.0f) ?
+        std::clamp(edge_penalty(neighbor) / max_penalty, 0.0f, 1.0f) : 0.0f;
+      edge_arrow_marker.color.a =
+        arrow_alpha_min + (arrow_alpha_max - arrow_alpha_min) * penalty_t;
 
       msg.markers.push_back(edge_arrow_marker);
     }
