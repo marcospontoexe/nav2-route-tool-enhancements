@@ -11,6 +11,9 @@
  WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
  License for the specific language governing permissions and limitations under
  the License.
+
+ Modified in 2026 by Marcos Daniel Santana Grochoska and Erico Meger (Route
+ Tool enhancements, see README.md in the repository root).
 -->
 
 <ui version="4.0">
@@ -76,6 +79,16 @@
                 </widget>
                </item>
               </layout>
+             </item>
+             <item>
+              <widget class="QCheckBox" name="bidirectional_checkbox">
+               <property name="text">
+                <string>Bidirectional Edge</string>
+               </property>
+               <property name="toolTip">
+                <string>Create edges in both directions automatically</string>
+               </property>
+              </widget>
              </item>
              <item>
               <layout class="QHBoxLayout" name="horizontalLayout_4">

@@ -11,6 +11,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+//
+// Modified in 2026 by Marcos Daniel Santana Grochoska and Erico Meger (Route Tool enhancements, see
+// README.md in the repository root).
 
 #include "nav2_rviz_plugins/route_tool.hpp"
 #include <QDesktopServices>
@@ -39,6 +42,7 @@ RouteTool::RouteTool(QWidget * parent)
   ui_->add_node_button->setChecked(true);
   ui_->edit_node_button->setChecked(true);
   ui_->remove_node_button->setChecked(true);
+  ui_->bidirectional_checkbox->setEnabled(false);
   // Needed to prevent memory addresses moving from resizing
   // when adding nodes and edges
   graph_.reserve(1000);
@@ -133,8 +137,28 @@ void RouteTool::on_create_button_clicked(void)
     } else {
       graph_to_incoming_edges_map_[end_node] = std::vector<unsigned int> {next_node_id_};
     }
-    edge_to_node_map_[next_node_id_++] = start_node;
-    RCLCPP_INFO(node_->get_logger(), "Adding edge from %d to %d", start_node, end_node);
+    edge_to_node_map_[next_node_id_] = start_node;
+    RCLCPP_INFO(
+      node_->get_logger(), "Adding edge from %d to %d (ID: %d)",
+      start_node, end_node, next_node_id_);
+    next_node_id_++;
+
+    if (ui_->bidirectional_checkbox->isChecked()) {
+      graph_[graph_to_id_map_[end_node]].addEdge(
+        edge_cost, &(graph_[graph_to_id_map_[start_node]]),
+        next_node_id_);
+      if (graph_to_incoming_edges_map_.find(start_node) != graph_to_incoming_edges_map_.end()) {
+        graph_to_incoming_edges_map_[start_node].push_back(next_node_id_);
+      } else {
+        graph_to_incoming_edges_map_[start_node] = std::vector<unsigned int> {next_node_id_};
+      }
+      edge_to_node_map_[next_node_id_] = end_node;
+      RCLCPP_INFO(
+        node_->get_logger(), "Adding reverse edge from %d to %d (ID: %d)",
+        end_node, start_node, next_node_id_);
+      next_node_id_++;
+    }
+
     update_route_graph();
   }
   ui_->add_field_1->setText("");
@@ -232,10 +256,12 @@ void RouteTool::on_add_node_button_toggled(void)
     ui_->add_text->setText("Position:");
     ui_->add_label_1->setText("X:");
     ui_->add_label_2->setText("Y:");
+    ui_->bidirectional_checkbox->setEnabled(false);
   } else {
     ui_->add_text->setText("Connections:");
     ui_->add_label_1->setText("Start Node ID:");
     ui_->add_label_2->setText("End Node ID:");
+    ui_->bidirectional_checkbox->setEnabled(true);
   }
 }
 
