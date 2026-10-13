@@ -11,6 +11,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+//
+// Modified in 2026 by Marcos Daniel Santana Grochoska and Erico Meger (Route Tool enhancements, see
+// README.md in the repository root).
 
 #include <limits>
 #include <string>
@@ -115,6 +118,21 @@ inline visualization_msgs::msg::MarkerArray toMsg(
   edge_id_marker.color.a = 1.0;
   edge_id_marker.color.g = 1.0;
 
+  visualization_msgs::msg::Marker edge_arrow_marker;
+  edge_arrow_marker.header.frame_id = frame;
+  edge_arrow_marker.header.stamp = now;
+  edge_arrow_marker.action = 0;
+  edge_arrow_marker.ns = "route_graph_edge_arrows";
+  edge_arrow_marker.type = visualization_msgs::msg::Marker::ARROW;
+  edge_arrow_marker.scale.x = 0.15;  // Arrow length
+  edge_arrow_marker.scale.y = 0.03;  // Arrow width
+  edge_arrow_marker.scale.z = 0.03;  // Arrow height
+  edge_arrow_marker.color.a = 0.8;
+  edge_arrow_marker.color.r = 1.0;  // Orange by default; recolored per edge below
+  edge_arrow_marker.color.g = 0.5;
+  edge_arrow_marker.color.b = 0.0;
+  edge_arrow_marker.pose.position.z = 0.05;  // Slightly above the ground
+
   for (const auto & node : graph) {
     node_pos.x = node.coords.x;
     node_pos.y = node.coords.y;
@@ -132,6 +150,16 @@ inline visualization_msgs::msg::MarkerArray toMsg(
       edge_start.y = node.coords.y;
       edge_end.x = neighbor.end->coords.x;
       edge_end.y = neighbor.end->coords.y;
+
+      // Check whether the reverse edge exists (bidirectional pair)
+      bool is_bidirectional = false;
+      for (const auto & reverse_neighbor : neighbor.end->neighbors) {
+        if (reverse_neighbor.end->nodeid == node.nodeid) {
+          is_bidirectional = true;
+          break;
+        }
+      }
+
       edges_marker.points.push_back(edge_start);
       edges_marker.points.push_back(edge_end);
 
@@ -152,6 +180,46 @@ inline visualization_msgs::msg::MarkerArray toMsg(
         node.coords.y + ((neighbor.end->coords.y - node.coords.y) / 2.0) + y_offset;
       edge_id_marker.text = std::to_string(neighbor.edgeid);
       msg.markers.push_back(edge_id_marker);
+      // Add arrow for Edge ID
+      edge_arrow_marker.id++;
+
+      // The arrow sits at the midpoint of the edge
+      float arrow_x = node.coords.x + ((neighbor.end->coords.x - node.coords.x) / 2.0);
+      float arrow_y = node.coords.y + ((neighbor.end->coords.y - node.coords.y) / 2.0);
+
+      edge_arrow_marker.pose.position.x = arrow_x;
+      edge_arrow_marker.pose.position.y = arrow_y;
+
+      // Point the arrow along the edge direction (start -> end)
+      float dx = neighbor.end->coords.x - node.coords.x;
+      float dy = neighbor.end->coords.y - node.coords.y;
+      float yaw = std::atan2(dy, dx);
+
+      // Yaw-only quaternion
+      edge_arrow_marker.pose.orientation.x = 0.0;
+      edge_arrow_marker.pose.orientation.y = 0.0;
+      edge_arrow_marker.pose.orientation.z = std::sin(yaw / 2.0);
+      edge_arrow_marker.pose.orientation.w = std::cos(yaw / 2.0);
+
+      // Color the arrow by edge type
+      if (is_bidirectional && node.nodeid > neighbor.end->nodeid) {
+        // Blue arrow for the return edge of a bidirectional pair
+        edge_arrow_marker.color.r = 0.3;
+        edge_arrow_marker.color.g = 0.7;
+        edge_arrow_marker.color.b = 1.0;
+      } else if (is_bidirectional) {
+        // Green/yellow arrow for the outbound edge of a bidirectional pair
+        edge_arrow_marker.color.r = 0.5;
+        edge_arrow_marker.color.g = 1.0;
+        edge_arrow_marker.color.b = 0.3;
+      } else {
+        // Orange arrow for a unidirectional edge
+        edge_arrow_marker.color.r = 1.0;
+        edge_arrow_marker.color.g = 0.5;
+        edge_arrow_marker.color.b = 0.0;
+      }
+
+      msg.markers.push_back(edge_arrow_marker);
     }
   }
 

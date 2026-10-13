@@ -11,6 +11,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License. Reserved.
+//
+// Modified in 2026 by Marcos Daniel Santana Grochoska (tests for the Route Tool
+// enhancements, see README.md in the repository root).
 
 #include <math.h>
 #include <memory>
@@ -163,11 +166,14 @@ TEST(UtilsTest, test_to_visualization_msg_conversion)
   constexpr size_t expected_node_markers = 1;
   constexpr size_t expected_edge_id_text_markers = 8;
   constexpr size_t expected_node_id_text_markers = 9;
+  constexpr size_t expected_edge_arrow_markers = 8;  // One direction arrow per edge
   constexpr size_t expected_total_markers =
     expected_edge_markers + expected_node_markers +
-    expected_edge_id_text_markers + expected_node_id_text_markers;
+    expected_edge_id_text_markers + expected_node_id_text_markers +
+    expected_edge_arrow_markers;
 
   EXPECT_EQ(graph_msg.markers.size(), expected_total_markers);
+  size_t arrow_markers = 0;
   for (auto & marker : graph_msg.markers) {
     if (marker.ns == "route_graph_ids") {
       EXPECT_EQ(marker.type, visualization_msgs::msg::Marker::TEXT_VIEW_FACING);
@@ -175,8 +181,24 @@ TEST(UtilsTest, test_to_visualization_msg_conversion)
       EXPECT_TRUE(
         (marker.type == visualization_msgs::msg::Marker::LINE_LIST) ||
         (marker.type == visualization_msgs::msg::Marker::SPHERE));
+    } else if (marker.ns == "route_graph_edge_arrows") {
+      EXPECT_EQ(marker.type, visualization_msgs::msg::Marker::ARROW);
+      arrow_markers++;
+      if (marker.id == 1) {
+        // First edge: node 1 (0, 0) -> node 2 (0, 1), yaw = +90 deg. It is the outbound
+        // edge of a bidirectional pair (node 2 -> node 1 also exists): green/yellow
+        EXPECT_NEAR(marker.pose.orientation.z, std::sin(M_PI / 4.0), 1e-5);
+        EXPECT_NEAR(marker.pose.orientation.w, std::cos(M_PI / 4.0), 1e-5);
+        EXPECT_FLOAT_EQ(marker.color.r, 0.5f);
+        EXPECT_FLOAT_EQ(marker.color.g, 1.0f);
+      } else if (marker.id == 2) {
+        // Second edge: node 1 -> node 4 has no reverse edge: orange
+        EXPECT_FLOAT_EQ(marker.color.r, 1.0f);
+        EXPECT_FLOAT_EQ(marker.color.g, 0.5f);
+      }
     }
   }
+  EXPECT_EQ(arrow_markers, expected_edge_arrow_markers);
 }
 
 TEST(UtilsTest, test_normalized_dot)
