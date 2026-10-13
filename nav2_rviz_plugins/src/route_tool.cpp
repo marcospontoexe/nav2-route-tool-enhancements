@@ -43,6 +43,8 @@ RouteTool::RouteTool(QWidget * parent)
   ui_->edit_node_button->setChecked(true);
   ui_->remove_node_button->setChecked(true);
   ui_->bidirectional_checkbox->setEnabled(false);
+  ui_->add_speed_field->setPlainText("100.0");
+  ui_->add_speed_field->setEnabled(false);
   // Needed to prevent memory addresses moving from resizing
   // when adding nodes and edges
   graph_.reserve(1000);
@@ -129,9 +131,15 @@ void RouteTool::on_create_button_clicked(void)
     auto start_node = ui_->add_field_1->toPlainText().toInt();
     auto end_node = ui_->add_field_2->toPlainText().toInt();
     nav2_route::EdgeCost edge_cost;
+
+    // Populate the edge metadata with the speed limit entered by the user
+    auto speed_limit = ui_->add_speed_field->toPlainText().toFloat();
+    nav2_route::Metadata edge_metadata;
+    edge_metadata.setValue<float>("speed_limit", speed_limit);
+
     graph_[graph_to_id_map_[start_node]].addEdge(
       edge_cost, &(graph_[graph_to_id_map_[end_node]]),
-      next_node_id_);
+      next_node_id_, edge_metadata);
     if (graph_to_incoming_edges_map_.find(end_node) != graph_to_incoming_edges_map_.end()) {
       graph_to_incoming_edges_map_[end_node].push_back(next_node_id_);
     } else {
@@ -139,14 +147,14 @@ void RouteTool::on_create_button_clicked(void)
     }
     edge_to_node_map_[next_node_id_] = start_node;
     RCLCPP_INFO(
-      node_->get_logger(), "Adding edge from %d to %d (ID: %d)",
-      start_node, end_node, next_node_id_);
+      node_->get_logger(), "Adding edge from %d to %d (ID: %d, speed_limit: %.2f)",
+      start_node, end_node, next_node_id_, speed_limit);
     next_node_id_++;
 
     if (ui_->bidirectional_checkbox->isChecked()) {
       graph_[graph_to_id_map_[end_node]].addEdge(
         edge_cost, &(graph_[graph_to_id_map_[start_node]]),
-        next_node_id_);
+        next_node_id_, edge_metadata);
       if (graph_to_incoming_edges_map_.find(start_node) != graph_to_incoming_edges_map_.end()) {
         graph_to_incoming_edges_map_[start_node].push_back(next_node_id_);
       } else {
@@ -154,8 +162,8 @@ void RouteTool::on_create_button_clicked(void)
       }
       edge_to_node_map_[next_node_id_] = end_node;
       RCLCPP_INFO(
-        node_->get_logger(), "Adding reverse edge from %d to %d (ID: %d)",
-        end_node, start_node, next_node_id_);
+        node_->get_logger(), "Adding reverse edge from %d to %d (ID: %d, speed_limit: %.2f)",
+        end_node, start_node, next_node_id_, speed_limit);
       next_node_id_++;
     }
 
@@ -163,6 +171,7 @@ void RouteTool::on_create_button_clicked(void)
   }
   ui_->add_field_1->setText("");
   ui_->add_field_2->setText("");
+  ui_->add_speed_field->setPlainText("100.0");
 }
 
 void RouteTool::on_confirm_button_clicked(void)
@@ -257,11 +266,13 @@ void RouteTool::on_add_node_button_toggled(void)
     ui_->add_label_1->setText("X:");
     ui_->add_label_2->setText("Y:");
     ui_->bidirectional_checkbox->setEnabled(false);
+    ui_->add_speed_field->setEnabled(false);
   } else {
     ui_->add_text->setText("Connections:");
     ui_->add_label_1->setText("Start Node ID:");
     ui_->add_label_2->setText("End Node ID:");
     ui_->bidirectional_checkbox->setEnabled(true);
+    ui_->add_speed_field->setEnabled(true);
   }
 }
 
