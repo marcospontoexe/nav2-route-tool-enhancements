@@ -167,13 +167,16 @@ TEST(UtilsTest, test_to_visualization_msg_conversion)
   constexpr size_t expected_edge_id_text_markers = 8;
   constexpr size_t expected_node_id_text_markers = 9;
   constexpr size_t expected_edge_arrow_markers = 8;  // One direction arrow per edge
+  constexpr size_t expected_node_id_bg_markers = 9;  // One background plate per node ID
+  constexpr size_t expected_edge_id_bg_markers = 8;  // One background plate per edge ID
   constexpr size_t expected_total_markers =
     expected_edge_markers + expected_node_markers +
     expected_edge_id_text_markers + expected_node_id_text_markers +
-    expected_edge_arrow_markers;
+    expected_edge_arrow_markers + expected_node_id_bg_markers +
+    expected_edge_id_bg_markers;
 
   EXPECT_EQ(graph_msg.markers.size(), expected_total_markers);
-  size_t arrow_markers = 0;
+  size_t arrow_markers = 0, node_id_bg_markers = 0, edge_id_bg_markers = 0;
   for (auto & marker : graph_msg.markers) {
     if (marker.ns == "route_graph_ids") {
       EXPECT_EQ(marker.type, visualization_msgs::msg::Marker::TEXT_VIEW_FACING);
@@ -196,9 +199,17 @@ TEST(UtilsTest, test_to_visualization_msg_conversion)
         EXPECT_FLOAT_EQ(marker.color.r, 1.0f);
         EXPECT_FLOAT_EQ(marker.color.g, 0.5f);
       }
+    } else if (marker.ns == "route_graph_node_ids_bg") {
+      EXPECT_EQ(marker.type, visualization_msgs::msg::Marker::CUBE);
+      node_id_bg_markers++;
+    } else if (marker.ns == "route_graph_edge_ids_bg") {
+      EXPECT_EQ(marker.type, visualization_msgs::msg::Marker::CUBE);
+      edge_id_bg_markers++;
     }
   }
   EXPECT_EQ(arrow_markers, expected_edge_arrow_markers);
+  EXPECT_EQ(node_id_bg_markers, expected_node_id_bg_markers);
+  EXPECT_EQ(edge_id_bg_markers, expected_edge_id_bg_markers);
 }
 
 TEST(UtilsTest, test_normalized_dot)

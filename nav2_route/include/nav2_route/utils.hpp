@@ -101,10 +101,13 @@ inline visualization_msgs::msg::MarkerArray toMsg(
   node_id_marker.ns = "route_graph_node_ids";
   node_id_marker.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
   node_id_marker.scale.x = 0.1;
-  node_id_marker.scale.y = 0.1;
-  node_id_marker.scale.z = 0.1;
+  node_id_marker.scale.y = 0.15;
+  node_id_marker.scale.z = 0.15;
   node_id_marker.color.a = 1.0;
-  node_id_marker.color.r = 1.0;
+  node_id_marker.color.r = 1.0;  // Yellow (red + green): stands out more than upstream's red
+  node_id_marker.color.g = 1.0;
+  node_id_marker.color.b = 0.0;
+  node_id_marker.pose.position.z = 0.3;  // Raise node IDs above the node spheres
 
   visualization_msgs::msg::Marker edge_id_marker;
   edge_id_marker.header.frame_id = frame;
@@ -112,11 +115,44 @@ inline visualization_msgs::msg::MarkerArray toMsg(
   edge_id_marker.action = 0;
   edge_id_marker.ns = "route_graph_edge_ids";
   edge_id_marker.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
-  edge_id_marker.scale.x = 0.1;
-  edge_id_marker.scale.y = 0.1;
-  edge_id_marker.scale.z = 0.1;
+  edge_id_marker.scale.x = 0.12;  // Slightly larger than upstream's 0.1
+  edge_id_marker.scale.y = 0.12;
+  edge_id_marker.scale.z = 0.12;
   edge_id_marker.color.a = 1.0;
-  edge_id_marker.color.g = 1.0;
+  edge_id_marker.color.r = 0.0;  // Blue: unidirectional default (pairs recolored below)
+  edge_id_marker.color.g = 0.2;
+  edge_id_marker.color.b = 1.0;
+  edge_id_marker.pose.position.z = 0.2;  // Raise edge IDs above the edge lines
+
+  visualization_msgs::msg::Marker node_id_bg_marker;
+  node_id_bg_marker.header.frame_id = frame;
+  node_id_bg_marker.header.stamp = now;
+  node_id_bg_marker.action = 0;
+  node_id_bg_marker.ns = "route_graph_node_ids_bg";
+  node_id_bg_marker.type = visualization_msgs::msg::Marker::CUBE;
+  node_id_bg_marker.scale.x = 0.18;  // Slightly larger than the text
+  node_id_bg_marker.scale.y = 0.08;
+  node_id_bg_marker.scale.z = 0.001;  // Thin plate
+  node_id_bg_marker.color.a = 0.8;  // Semi-transparent
+  node_id_bg_marker.color.r = 0.0;  // Black
+  node_id_bg_marker.color.g = 0.0;
+  node_id_bg_marker.color.b = 0.0;
+  node_id_bg_marker.pose.position.z = 0.3;  // Just behind the text
+
+  visualization_msgs::msg::Marker edge_id_bg_marker;
+  edge_id_bg_marker.header.frame_id = frame;
+  edge_id_bg_marker.header.stamp = now;
+  edge_id_bg_marker.action = 0;
+  edge_id_bg_marker.ns = "route_graph_edge_ids_bg";
+  edge_id_bg_marker.type = visualization_msgs::msg::Marker::CUBE;
+  edge_id_bg_marker.scale.x = 0.15;
+  edge_id_bg_marker.scale.y = 0.08;
+  edge_id_bg_marker.scale.z = 0.001;
+  edge_id_bg_marker.color.a = 0.8;
+  edge_id_bg_marker.color.r = 0.0;
+  edge_id_bg_marker.color.g = 0.0;
+  edge_id_bg_marker.color.b = 0.0;
+  edge_id_bg_marker.pose.position.z = 0.19;
 
   visualization_msgs::msg::Marker edge_arrow_marker;
   edge_arrow_marker.header.frame_id = frame;
@@ -138,10 +174,16 @@ inline visualization_msgs::msg::MarkerArray toMsg(
     node_pos.y = node.coords.y;
     nodes_marker.points.push_back(node_pos);
 
+    // Add background for Node ID
+    node_id_bg_marker.id++;
+    node_id_bg_marker.pose.position.x = node.coords.x + 0.15;
+    node_id_bg_marker.pose.position.y = node.coords.y + 0.15;
+    msg.markers.push_back(node_id_bg_marker);
+
     // Add text for Node ID
     node_id_marker.id++;
-    node_id_marker.pose.position.x = node.coords.x + 0.07;
-    node_id_marker.pose.position.y = node.coords.y;
+    node_id_marker.pose.position.x = node.coords.x + 0.15;
+    node_id_marker.pose.position.y = node.coords.y + 0.15;
     node_id_marker.text = std::to_string(node.nodeid);
     msg.markers.push_back(node_id_marker);
 
@@ -166,20 +208,58 @@ inline visualization_msgs::msg::MarkerArray toMsg(
       // Deal with overlapping bi-directional text markers by offsetting locations
       float y_offset = 0.0;
       if (node.nodeid > neighbor.end->nodeid) {
-        y_offset = 0.05;
+        y_offset = 0.08;  // Wider than upstream's 0.05 to fit the label backgrounds
       } else {
-        y_offset = -0.05;
+        y_offset = -0.08;
       }
-      const float x_offset = 0.07;
+      const float x_offset = 0.12;  // Wider than upstream's 0.07 to fit the label backgrounds
+
+      // Bidirectional pairs get their own ID colors
+      visualization_msgs::msg::Marker current_edge_id_bg = edge_id_bg_marker;
+      visualization_msgs::msg::Marker current_edge_id = edge_id_marker;
+
+      if (is_bidirectional && node.nodeid > neighbor.end->nodeid) {
+        // "Return" edge of a bidirectional pair: light blue text on dark blue
+        current_edge_id_bg.color.r = 0.0;
+        current_edge_id_bg.color.g = 0.3;
+        current_edge_id_bg.color.b = 0.6;
+        current_edge_id_bg.color.a = 0.9;
+
+        current_edge_id.color.r = 0.3;
+        current_edge_id.color.g = 0.7;
+        current_edge_id.color.b = 1.0;
+      } else if (is_bidirectional) {
+        // "Outbound" edge of a bidirectional pair: green/yellow text on dark green
+        current_edge_id_bg.color.r = 0.2;
+        current_edge_id_bg.color.g = 0.5;
+        current_edge_id_bg.color.b = 0.0;
+        current_edge_id_bg.color.a = 0.9;
+
+        current_edge_id.color.r = 0.5;
+        current_edge_id.color.g = 1.0;
+        current_edge_id.color.b = 0.3;
+      }
+      // else: unidirectional edges keep the default blue
+
+      // Add background for Edge ID
+      current_edge_id_bg.id = edge_id_bg_marker.id + 1;
+      edge_id_bg_marker.id++;
+      current_edge_id_bg.pose.position.x =
+        node.coords.x + ((neighbor.end->coords.x - node.coords.x) / 2.0) + x_offset;
+      current_edge_id_bg.pose.position.y =
+        node.coords.y + ((neighbor.end->coords.y - node.coords.y) / 2.0) + y_offset;
+      msg.markers.push_back(current_edge_id_bg);
 
       // Add text for Edge ID
+      current_edge_id.id = edge_id_marker.id + 1;
       edge_id_marker.id++;
-      edge_id_marker.pose.position.x =
+      current_edge_id.pose.position.x =
         node.coords.x + ((neighbor.end->coords.x - node.coords.x) / 2.0) + x_offset;
-      edge_id_marker.pose.position.y =
+      current_edge_id.pose.position.y =
         node.coords.y + ((neighbor.end->coords.y - node.coords.y) / 2.0) + y_offset;
-      edge_id_marker.text = std::to_string(neighbor.edgeid);
-      msg.markers.push_back(edge_id_marker);
+      current_edge_id.text = std::to_string(neighbor.edgeid);
+      msg.markers.push_back(current_edge_id);
+
       // Add arrow for Edge ID
       edge_arrow_marker.id++;
 
