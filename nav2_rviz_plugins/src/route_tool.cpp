@@ -21,6 +21,7 @@
 #include <sys/types.h>
 #include <QFileDialog>
 #include "rviz_common/display_context.hpp"
+#include "tf2/exceptions.h"
 
 
 namespace nav2_rviz_plugins
@@ -37,14 +38,21 @@ RouteTool::RouteTool(QWidget * parent)
     "route_graph", rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable());
   node_->activate();
   tf_ = std::make_shared<tf2_ros::Buffer>(node_->get_clock());
+  // Listen to /tf and /tf_static on a dedicated thread so tf_ is actually filled (without it, tf_
+  // never received any transform)
+  transform_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_);
   graph_loader_ = std::make_shared<nav2_route::GraphLoader>(node_, tf_, "map");
   graph_saver_ = std::make_shared<nav2_route::GraphSaver>(node_, tf_, "map");
+  // Robot frame used by the "Get Pose" button (same default as the rest of nav2_route)
+  node_->declare_parameter("base_frame", rclcpp::ParameterValue(std::string("base_link")));
+  node_->get_parameter("base_frame", base_frame_);
   ui_->add_node_button->setChecked(true);
   ui_->edit_node_button->setChecked(true);
   ui_->remove_node_button->setChecked(true);
   ui_->bidirectional_checkbox->setEnabled(false);
   ui_->add_speed_field->setPlainText("100.0");
   ui_->add_speed_field->setEnabled(false);
+  ui_->get_pose_button->setEnabled(true);
   // Needed to prevent memory addresses moving from resizing
   // when adding nodes and edges
   graph_.reserve(1000);
@@ -267,13 +275,33 @@ void RouteTool::on_add_node_button_toggled(void)
     ui_->add_label_2->setText("Y:");
     ui_->bidirectional_checkbox->setEnabled(false);
     ui_->add_speed_field->setEnabled(false);
+    ui_->get_pose_button->setEnabled(true);
   } else {
     ui_->add_text->setText("Connections:");
     ui_->add_label_1->setText("Start Node ID:");
     ui_->add_label_2->setText("End Node ID:");
     ui_->bidirectional_checkbox->setEnabled(true);
     ui_->add_speed_field->setEnabled(true);
+    ui_->get_pose_button->setEnabled(false);
   }
+}
+
+void RouteTool::on_get_pose_button_clicked(void)
+{
+  geometry_msgs::msg::TransformStamped transform;
+  try {
+    // TimePointZero = latest available transform, without blocking
+    transform = tf_->lookupTransform("map", base_frame_, tf2::TimePointZero);
+  } catch (const tf2::TransformException & ex) {
+    RCLCPP_WARN(
+      node_->get_logger(),
+      "Nao foi possivel obter a pose atual do robo (map -> %s): %s",
+      base_frame_.c_str(), ex.what());
+    return;
+  }
+  // Same formatting the clicked_point subscription already uses for these two fields (onInitialize)
+  ui_->add_field_1->setText(std::to_string(transform.transform.translation.x).c_str());
+  ui_->add_field_2->setText(std::to_string(transform.transform.translation.y).c_str());
 }
 
 void RouteTool::on_edit_node_button_toggled(void)

@@ -11,6 +11,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+//
+// Modified in 2026 by Marcos Daniel Santana Grochoska ("Get Pose" button, see README.md in the
+// repository root).
 
 #ifndef NAV2_RVIZ_PLUGINS__ROUTE_TOOL_HPP_
 #define NAV2_RVIZ_PLUGINS__ROUTE_TOOL_HPP_
@@ -31,6 +34,7 @@
 #include "rviz_common/panel.hpp"
 #include "std_msgs/msg/int16.hpp"
 #include "std_msgs/msg/string.hpp"
+#include "tf2_ros/transform_listener.h"
 
 
 namespace nav2_rviz_plugins
@@ -90,6 +94,8 @@ private Q_SLOTS:
 
   void on_edit_node_button_toggled(void);
 
+  void on_get_pose_button_clicked(void);
+
   /**
        *  Finally, we close up with protected member variables
        */
@@ -104,6 +110,10 @@ private:
   std::shared_ptr<nav2_route::GraphLoader> graph_loader_;
   std::shared_ptr<nav2_route::GraphSaver> graph_saver_;
   std::shared_ptr<tf2_ros::Buffer> tf_;
+  // Listens to /tf and /tf_static on its own thread so tf_ is actually filled
+  std::shared_ptr<tf2_ros::TransformListener> transform_listener_;
+  // Robot frame used by the "Get Pose" button (map -> base_frame_)
+  std::string base_frame_;
   nav2_route::Graph graph_;
   nav2_route::GraphToIDMap graph_to_id_map_;
   nav2_route::GraphToIDMap edge_to_node_map_;
