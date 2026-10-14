@@ -4,6 +4,20 @@ Usability and visualization improvements for the **Route Tool**, the RViz panel 
 
 ![Route Tool panel with direction arrows, color-coded bidirectional edges, ID labels, speed limit labels and the new Bidirectional Edge / Speed / Get Pose controls](docs/images/route_tool.png)
 
+## Why this repository exists
+
+The Route Tool that ships with Nav2 made building real route graphs slow and the result hard to read:
+
+- **One edge at a time.** Letting the robot travel both ways between two nodes meant creating `A → B` and then `B → A` as two separate edges.
+- **Overlapping IDs.** Edge ID labels were drawn right on the edge lines, and the two labels of a bidirectional pair sat only 10 cm apart with 10 cm tall text, almost on top of each other. In a dense graph the IDs became hard to read.
+- **None of the other features below**: edges had no visible direction, there was no way to see or set an edge's speed limit from the panel, no way to place a node at the robot's current position, and no visual cue for penalized edges.
+
+![The original Route Tool: plain green edges without direction, small edge ID labels overlapping the lines, and only Start/End node fields to create one edge at a time](docs/images/routetool_original.png)
+
+*The original Route Tool, before these changes: plain edges with no direction, small ID labels on top of the lines, and only "Start Node ID" / "End Node ID" to create one edge at a time.*
+
+## What this repository contains
+
 This repository contains the `nav2_route` and `nav2_rviz_plugins` packages from [ros-navigation/navigation2](https://github.com/ros-navigation/navigation2) at tag [`1.3.13`](https://github.com/ros-navigation/navigation2/tree/1.3.13) (ROS 2 Jazzy). The first commit is an unmodified import of those two packages, and **each later commit is one of the features below**, so the [commit history](https://github.com/marcospontoexe/nav2-route-tool-enhancements/commits/main) shows exactly what was added on top of Nav2.
 
 ## Features
@@ -76,4 +90,4 @@ The launch file opens RViz with the Route Tool panel already configured. The pan
 
 - Licensed under the [Apache License 2.0](LICENSE), like the original Nav2 code. Modified files say so in their header.
 - `nav2_route` and the Route Tool are part of [Nav2](https://github.com/ros-navigation/navigation2); the Route Tool was originally written by John Chrosniak (2024). This repository is not affiliated with or endorsed by the Nav2 project.
-- Enhancements by Marcos Daniel Santana Grochoska ([@marcospontoexe](https://github.com/marcospontoexe)), with [Erico Meger](https://github.com/EricoMeger) as co-author of features 1–4.
+- Enhancements by Marcos Daniel Santana Grochoska ([@marcospontoexe](https://github.com/marcospontoexe)), with [Erico Meger](https://github.com/EricoMeger) as co-author of features 1–3.
